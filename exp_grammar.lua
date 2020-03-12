@@ -46,14 +46,6 @@ local function show(a)
     ouF (getVal(a))
 end
 
-local function recorderror (pos, label)
-
-end
-
-local function record(label)
-    return (lp.Cp() * lp.Cc(label)) / recorderror
-end
-
 genParser = function (ouFunction) -- `ouF` describes what to do with showing expressions.
     ouF = ouFunction or print
     local parser = lp.P{
