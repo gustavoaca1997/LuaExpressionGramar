@@ -21,7 +21,7 @@ local operation = {
 
 local function getVal (id)
     return type(id) == "string" and 
-            (symTable[id] or error("Variable not in scope")) or id
+            (symTable[id] or error("Variable not defined")) or id
 end
 
 local function evalOp (a, op, b)
@@ -40,7 +40,7 @@ local function show(ouF)
     end
 end
 
-parser = function (ouF) -- `ouF` describes what to do with showing expressions.
+genParser = function (ouF) -- `ouF` describes what to do with showing expressions.
     ouF = ouF or print
     return lpeg.P{
         "Program";
@@ -51,4 +51,4 @@ parser = function (ouF) -- `ouF` describes what to do with showing expressions.
         Factor      =   var + num + openPar * lpeg.V("Exp") * closePar,
     } * -1
 end
-return parser
+return genParser
