@@ -1,16 +1,17 @@
-local lpeg = require "lpeglabel"
-lpeg.locale(lpeg)
+local lp = require "lpeglabel"
+local re = require "relabel"
+lp.locale(lp)
 
-local space = lpeg.space^0
-local var = lpeg.C(lpeg.alpha * lpeg.alnum^0) * space
-local num = lpeg.C( lpeg.digit^1 * ("." * lpeg.digit^1)^-1 ) * space / tonumber
-local openPar = "(" * space
-local closePar = ")" * space
-local termOp = lpeg.C(lpeg.S("+-")) * space
-local factorOp = lpeg.C(lpeg.S("*/")) * space
-local assignSign = "=" * space
+local space = lp.space^0
+local var = space * lp.C(lp.alpha * lp.alnum^0) * space
+local num = space * lp.C( lp.P("-")^-1 * lp.digit^1 * ("." * lp.digit^1)^-1 ) * space / tonumber
+local openPar = space * "(" * space
+local closePar = space * ")" * space
+local termOp = space * lp.C(lp.S("+-")) * space
+local factorOp = space * lp.C(lp.S("*/")) * space
+local assignSign = space * "=" * space
 
-local symTable = {}
+local symTable, ouF = {}
 
 local operation = {
     ["+"] = function (a, b) return a + (b or 0) end,
@@ -19,9 +20,16 @@ local operation = {
     ["/"] = function (a, b) return a / (b or 1) end,
 }
 
+local terrorMsgs = {
+    ErrStmt     = "expecting a command or an expression",
+    ErrExp      = "expecting a valid expression",
+    ErrTerm     = "expecting a valid term",
+    ErrFactor   = "expecting a valid factor",
+}
+
 local function getVal (id)
     return type(id) == "string" and 
-            (symTable[id] or error("Variable not defined")) or id
+            (symTable[id] or error("Variable '" .. id .. "' not defined")) or id
 end
 
 local function evalOp (a, op, b)
@@ -34,21 +42,40 @@ local function assign (lVal, rVal)
     symTable[lVal] = rVal
 end
 
-local function show(ouF)
-    return function (a)
-        ouF (getVal(a))
+local function show(a)
+    ouF (getVal(a))
+end
+
+local function recorderror (pos, label)
+
+end
+
+local function record(label)
+    return (lp.Cp() * lp.Cc(label)) / recorderror
+end
+
+genParser = function (ouFunction) -- `ouF` describes what to do with showing expressions.
+    ouF = ouFunction or print
+    local parser = lp.P{
+        "Program";
+        Program     =   (lp.V("Cmd") + lp.V("Exp") / show + #lp.P(1) * lp.T("ErrStmt"))^0,
+        Cmd         =   (var * assignSign * ( lp.V("Exp") + lp.T("ErrExp") ) * space) / assign,
+        Exp         =   lp.Cf( lp.V("Term") * lp.Cg( termOp * (lp.V("Term") + lp.T("ErrTerm")) )^0, evalOp ),
+        Term        =   lp.Cf( lp.V("Factor") * lp.Cg( factorOp * (lp.V("Factor") + lp.T("ErrFactor")) )^0, evalOp ),
+        Factor      =   var + num + openPar * lp.V("Exp") * closePar,
+    } * -1
+
+    return function(subject)
+        symTable = {}
+        local r, errLabel, pos = parser:match(subject)
+        if not r then
+            local line, col = re.calcline(subject, pos)
+            local errMsg = "Error at line " .. line .. ", column " .. col .. ": " .. 
+                terrorMsgs[errLabel] .. "."
+            error(errMsg)
+        end
+        return r
     end
 end
 
-genParser = function (ouF) -- `ouF` describes what to do with showing expressions.
-    ouF = ouF or print
-    return lpeg.P{
-        "Program";
-        Program     =   space * (lpeg.V("Cmd") + lpeg.V("Exp") / show(ouF))^0,
-        Cmd         =   (var * assignSign * lpeg.V("Exp") * space) / assign,
-        Exp         =   lpeg.Cf(lpeg.V("Term") * lpeg.Cg(termOp * lpeg.V("Term"))^0, evalOp),
-        Term        =   lpeg.Cf(lpeg.V("Factor") * lpeg.Cg(factorOp * lpeg.V("Factor"))^0, evalOp),
-        Factor      =   var + num + openPar * lpeg.V("Exp") * closePar,
-    } * -1
-end
-return genParser
+return genParser, terrorMsgs
