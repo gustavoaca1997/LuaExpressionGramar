@@ -12,12 +12,12 @@ Factor   -> num | var | '('Exp')'
 ```
 
 ## Usage
-Import the _parser generator_ with
+First import the higher order function `genParser` with
 ```lua
 genParser = dofile "exp_grammar.lua"
 ```
 
-`genParser` is a high order function that receives as parameter a function that "writes to an output" when an expression is evaluated as a statement. The `print` function is used by default.
+`genParser` receives as parameter a function that "writes to an output" when an expression is evaluated as a statement. The `print` function is used by default.
 
 For example:
 ```lua
