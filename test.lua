@@ -10,7 +10,6 @@ local function contains_error(state, arguments)
     end
 end
 
-assert:register("assertion", "evals_to", evals_to)
 assert:register("assertion", "contains_error", contains_error)
 
 describe("Arithmetic expression", function ( )
