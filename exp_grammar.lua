@@ -2,6 +2,8 @@ local lp = require "lpeglabel"
 local re = require "relabel"
 lp.locale(lp)
 
+local M = {} -- Module
+
 local space = lp.space^0
 local var = space * lp.C(lp.alpha * lp.alnum^0) * space
 local num = space * lp.C( lp.P("-")^-1 * lp.digit^1 * ("." * lp.digit^1)^-1 ) * space / tonumber
@@ -20,7 +22,7 @@ local operation = {
     ["/"] = function (a, b) return a / (b or 1) end,
 }
 
-local terrorMsgs = {
+M.terrorMsgs = {
     ErrStmt     = "expecting a command or an expression",
     ErrExp      = "expecting a valid expression",
     ErrTerm     = "expecting a valid term",
@@ -46,7 +48,7 @@ local function show(a)
     ouF (getVal(a))
 end
 
-genParser = function (ouFunction) -- `ouF` describes what to do with showing expressions.
+function M.genParser (ouFunction) -- `ouF` describes what to do with showing expressions.
     ouF = ouFunction or print
     local parser = lp.P{
         "Program";
@@ -63,11 +65,11 @@ genParser = function (ouFunction) -- `ouF` describes what to do with showing exp
         if not r then
             local line, col = re.calcline(subject, pos)
             local errMsg = "Error at line " .. line .. ", column " .. col .. ": " .. 
-                terrorMsgs[errLabel] .. "."
+                M.terrorMsgs[errLabel] .. "."
             error(errMsg)
         end
         return r
     end
 end
 
-return genParser, terrorMsgs
+return M
