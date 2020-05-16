@@ -1,171 +1,161 @@
-genParser, terrorMsgs = dofile "exp_grammar.lua"
+local function contains_error(state, arguments)
+    local expMsg, toCall = table.unpack(arguments)
 
-lu = require "luaunit"
-
-TestParser = {
-    -- All output of the program would be
-    -- stored in an array.
-    output = {}, 
-    parser = genParser(function (val) 
-        table.insert(TestParser.output, val) 
-    end),
-}
-    function TestParser:setUp()
-        self.output = {}
+    local ok, errMsg = pcall(toCall, table.unpack(arguments, 3))
+    if ok then
+        return false
+    else
+        local pos = string.find( errMsg, expMsg )
+        return pos
     end
+end
 
-    function TestParser:testSyntaxErrorAtProgramProduction()
-        input = [[
-            a = 1/2
-            b = a * 32
-            (a)
-            )b)
-        ]]
-        lu.assertErrorMsgContains(terrorMsgs.ErrStmt, self.parser, input)
-    end
+assert:register("assertion", "evals_to", evals_to)
+assert:register("assertion", "contains_error", contains_error)
 
-    function TestParser:testSyntaxErrorOfRValue()
-        input = [[
-            a = 1/2
-            b = .5
-        ]]
-        lu.assertErrorMsgContains(terrorMsgs.ErrExp, self.parser, input)
-    end
+describe("Arithmetic expression", function ( )
+    local output, expGrammarMod, genParser, terrorMsgs, parser
+    local evals_to
 
-    function TestParser:testSyntaxErrorOfTerm()
-        input = [[
-            a = 1/2
-            b = 1 - (a( * 32
-        ]]
-        lu.assertErrorMsgContains(terrorMsgs.ErrTerm, self.parser, input)
-    end
-    
-    function TestParser:testSyntaxErrorOfFactor()
-        input = [[
-            a = 1/2
-            b = 1 - (a * ( + 32)
-        ]]
-        lu.assertErrorMsgContains(terrorMsgs.ErrFactor, self.parser, input)
-    end
+    setup(function()
+        expGrammarMod = require "exp_grammar"
+        genParser = expGrammarMod.genParser
+        terrorMsgs = expGrammarMod.terrorMsgs
+        
+        parser = genParser(function (val)
+            table.insert(output, val)
+        end)
 
-TestInterpreter = {
-    -- All output of the program would be
-    -- stored in an array.
-    output = {}, 
-    parser = genParser(function (val) 
-        table.insert(TestInterpreter.output, val) 
-    end),
-}
+        evals_to = function (expected, input)
+            local result = parser(input)
+            assert.is_truthy(result)
+            assert.are.same(output, expected)
+        end
+    end)
 
-    function TestInterpreter:setUp()
-        self.output = {}
-    end
+    describe("parser", function()
+        setup(function (  )
+            output = {}
+        end)
 
-    function TestInterpreter:testOneNumber()
-        input = "3"
-        result = self.parser(input)
-        lu.assertEvalToTrue(result)
-        lu.assertEquals(self.output, {3})
-    end
+        it("throws statement syntax error", function()
+            local input = [[
+                a = 1/2
+                b = a * 32
+                (a)
+                )b)
+            ]]
+            local errfn = function ()
+                parser(input)
+            end
+            assert.contains_error(terrorMsgs.ErrStmt, parser, input)
+        end)
 
-    function TestInterpreter:testAddition()
-        input = "3+2"
-        result = self.parser(input)
-        lu.assertEvalToTrue(result)
-        lu.assertEquals(self.output, {5})
-    end
+        it("throws expression syntax error", function()
+            local input = [[
+                a = 1/2
+                b = .5
+            ]]
+            assert.contains_error(terrorMsgs.ErrExp, parser, input)
+        end)
 
-    function TestInterpreter:testSubstraction()
-        input = "3-0.75"
-        result = self.parser(input)
-        lu.assertEvalToTrue(result)
-        lu.assertEquals(self.output, {2.25})
-    end
+        it("throws term syntax error", function()
+            local input = [[
+                a = 1/2
+                b = 1 - (+)
+            ]]
+            assert.contains_error(terrorMsgs.ErrTerm, parser, input)
+        end)
 
-    function TestInterpreter:testMultiplication()
-        input = "0.5*4"
-        result = self.parser(input)
-        lu.assertEvalToTrue(result)
-        lu.assertEquals(self.output, {2.0})
-    end
+        it("throws factor syntax error", function()
+            local input = [[
+                a = 1/2
+                b = 1 - (a * ( + 32)
+            ]]
+            assert.contains_error(terrorMsgs.ErrFactor, parser, input)
+        end)
+    end)
 
-    function TestInterpreter:testDivision()
-        input = "4/2"
-        result = self.parser(input)
-        lu.assertEvalToTrue(result)
-        lu.assertEquals(self.output, {2.0})
-    end
+    describe("interpreter", function()
+        before_each(function()
+            output = {}
+        end)
 
-    function TestInterpreter:testPrecedence()
-        input = "1 + 2*3"
-        result = self.parser(input)
-        lu.assertEvalToTrue(result)
-        lu.assertEquals(self.output, {7})
-    end
+        it("shows one number", function()
+            evals_to({3}, "3")
+        end)
 
-    function TestInterpreter:testNegative()
-        input = "a = 2     a/-4"
-        result = self.parser(input)
-        lu.assertEvalToTrue(result)
-        lu.assertEquals(self.output, {-0.5})
-    end
+        it("evals addition", function()
+            evals_to({5}, "3 +  2")
+        end)
 
-    function TestInterpreter:testDoubleNegative()
-        input = "10 - -2"
-        result = self.parser(input)
-        lu.assertEvalToTrue(result)
-        lu.assertEquals(self.output, {12})
-    end
-    
-    function TestInterpreter:testSequence()
-        input = [[
-            3 
-            3.1416 - 1 
-            1 / 2 * 4
-        ]]
-        result = self.parser(input)
-        lu.assertEvalToTrue(result)
-        lu.assertEquals(self.output, { 3, 2.1416, 2 })
-    end
+        it("evals substraction", function()
+            evals_to({2.25}, "3  - 0.75")
+        end)
 
-    function TestInterpreter:testAssignment()
-        input = [[
-            a = 1/2
-            a*5
-        ]]
-        result = self.parser(input)
-        lu.assertEvalToTrue(result)
-        lu.assertEquals(self.output, { 2.5 })
-    end
+        it("evals multiplication", function()
+            evals_to({2.0}, "0.5*4")
+        end)
 
-    function TestInterpreter:testOperateTwoVariables()
-        input = [[
-            a = 1/2
-            b = a * 32
-            b - a
-        ]]
-        result = self.parser(input)
-        lu.assertEvalToTrue(result)
-        lu.assertEquals(self.output, { 15.5 })
-    end
+        it("evals division", function()
+            evals_to({2.0}, "4/2")
+        end)
 
-    function TestInterpreter:testUseNotDefinedVariable()
-        input = [[
-            a = 1/2
-            b = a0 * 32
-            c = 2
-        ]]
-        lu.assertErrorMsgContains("not defined", self.parser, input)
-    end
+        it("gives more precedence to multiplication than addition", function ()
+            evals_to({7}, "1 + 2 * 3")
+        end)
 
-    function TestInterpreter:testShowNotDefinedVariable()
-        input = [[
-            a = 1/2
-            b = a * 32
-            c
-            c = 2
-        ]]
-        lu.assertErrorMsgContains("not defined", self.parser, input)
-    end
+        it("evals negative numbers", function()
+            evals_to({-0.5}, "a = 2  a/-4")
+        end)
 
-os.exit( lu.LuaUnit.run() )
+        it("evals double negative operator", function()
+            evals_to({12}, "10 - -2")
+        end)
+
+        it("executes sequence of statements", function()
+            input = [[
+                3 
+                3.1416 - 1 
+                1 / 2 * 4
+            ]]
+            evals_to({3, 2.1416, 2}, input)
+        end)
+
+        it("assigns an expression to a variable", function()
+            input = [[
+                a = 1/2
+                a*5
+            ]]
+            evals_to({ 2.5 }, input)
+        end)
+
+        it("operates two variables", function()
+            input = [[
+                a = 1/2
+                b = a * 32
+                b - a
+            ]]
+            evals_to({ 15.5 }, input)
+        end)
+
+        it("throws error if an undefined variable is operated", function()
+            input = [[
+                a = 1/2
+                b = a0 * 32
+                c = 2
+            ]]
+            assert.contains_error("not defined", parser, input)
+        end)
+
+        it("throws error if an undefined variable is shown", function()
+            input = [[
+                a = 1/2
+                b = a * 32
+                c
+                c = 2
+            ]]
+            assert.contains_error("not defined", parser, input)
+        end)
+    end)
+end)
